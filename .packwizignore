@@ -2,3 +2,5 @@
 .github/
 *.md
 *.dat
+*.nix
+.env*
