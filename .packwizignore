@@ -4,3 +4,8 @@
 *.dat
 *.nix
 .env*
+/.gitattributes
+/.gitignore
+/files
+/LICENSE
+*.lock
