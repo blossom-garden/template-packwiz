@@ -1,0 +1,67 @@
+name: Export Modpack
+
+on: [ push ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  get-info:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Determine version number
+        id: version
+        run: echo $(cat ./pack.toml | grep "version = ") | sed -r 's/version = //' | sed -r 's/[" ]//g' | echo "ref=$(< /dev/stdin)\nLASTTAG=$(git describe --tags --abbrev=0)" >> "${GITHUB_OUTPUT}"
+
+      - name: Determine pack name
+        id: name
+        run: echo $(cat pack.toml | grep "name = ") | sed -r 's/name = //' | sed -r 's/[" ]//g' | sed -r 's/([a-z0-9])([A-Z])/\1-\2/g' | tr '[:upper:]' '[:lower:]' | echo "ref=$(< /dev/stdin)" >> "${GITHUB_OUTPUT}"
+
+    outputs:
+      LASTTAG: ${{ steps.version.outputs.LASTTAG }}
+      version: ${{ steps.version.outputs.ref }}
+      name: ${{ steps.name.outputs.ref }}
+
+  export:
+    needs:
+      - get-info
+    env:
+      version: ${{ needs.get-info.outputs.version }}
+      name: ${{ needs.get-info.outputs.name }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    runs-on: ubuntu-latest
+    if: ${{ needs.get-info.outputs.LASTTAG != needs.get-info.outputs.version }}
+    permissions: write-all
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup packwiz CLI
+        uses: vspr-sh/packwiz-setup-action@master
+
+      - name: Prepare Folders
+        run: rm -rf tmp; mkdir -p tmp
+
+      - name: Export To Modrinth Format
+        run: packwiz mr export -o tmp/${{env.name}}.mrpack
+
+      - name: Upload package to workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          path: tmp/${{env.name}}.mrpack
+          name: package-${{env.name}}.mrpack
+          retention-days: 1
+
+      - name: Upload package to GitHub release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ env.GITHUB_TOKEN }}
+          file: tmp/${{ env.name }}.mrpack
+          asset_name: ${{ env.name }}.mrpack
+          release_name: v${{ env.version }}
+          tag: ${{ env.version }}
+          overwrite: true
