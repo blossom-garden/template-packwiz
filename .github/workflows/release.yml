@@ -1,6 +1,20 @@
 name: Export Modpack
 
-on: [ push ]
+on:
+  workflow_dispatch:
+    inputs:
+      modrinth:
+        type: boolean
+        default: true
+        description: Export Modrinth format?
+      curseforge:
+        type: boolean
+        default: false
+        description: Export Curseforge format?
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -11,6 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
+        if: "!contains(github.event.head_commit.message, 'skip!')"
         uses: actions/checkout@v4
 
       - name: Determine version number, pack name and last version number
@@ -21,47 +36,66 @@ jobs:
           echo "LASTTAG=$(git describe --tags --abbrev=0)" >> "${GITHUB_OUTPUT}"
 
     outputs:
-      LASTTAG: ${{ steps.cat.outputs.LASTTAG }}
       version: ${{ steps.cat.outputs.version }}
       name: ${{ steps.cat.outputs.name }}
+      LASTTAG: ${{ steps.cat.outputs.LASTTAG }}
 
-  export:
+  build:
     needs:
       - get-info
     env:
       version: ${{ needs.get-info.outputs.version }}
       name: ${{ needs.get-info.outputs.name }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    runs-on: ubuntu-latest
-    if: ${{ needs.get-info.outputs.LASTTAG != needs.get-info.outputs.version }}
-    permissions: write-all
+      is_enabled: ${{(matrix.platform == 'modrinth' && inputs.modrinth) || (matrix.platform == 'curseforge' && inputs.curseforge)}}
+    strategy:
+      matrix:
+        include:
+          - platform: modrinth
+            extension: .mrpack
+            runner: ubuntu-latest
+
+          - platform: curseforge
+            extension: .zip
+            runner: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    if: needs.get-info.outputs.LASTTAG != needs.get-info.outputs.version
     steps:
       - name: Checkout code
+        if: env.is_enabled == true
         uses: actions/checkout@v4
 
+      - name: Prepare
+        if: env.is_enabled == true
+        run: rm -rfv build; mkdir -pv build
+
       - name: Setup packwiz CLI
-        if: ${{ needs.get-info.outputs.LASTTAG != needs.get-info.outputs.version }}
+        if: env.is_enabled == true
         uses: vspr-sh/packwiz-setup-action@master
 
-      - name: Prepare Folders
-        run: rm -rf tmp; mkdir -p tmp
+      - name: Export
+        if: env.is_enabled == true
+        run: packwiz ${{ matrix.platform }} export -o build/${{ env.name }}.${{ matrix.extension }}
 
-      - name: Export To Modrinth Format
-        run: packwiz mr export -o tmp/${{env.name}}.mrpack
-
-      - name: Upload package to workflow artifacts
-        uses: actions/upload-artifact@v4
+      - name: Upload mr package to workflow artifacts
+        if: env.is_enabled == true
+        uses: actions/upload-artifact@v6
         with:
-          path: tmp/${{env.name}}.mrpack
-          name: package-${{env.name}}.mrpack
+          path: build/${{ env.name }}.${{ matrix.extension }}
+          name: ${{ env.name }}-${{ matrix.platform }}
           retention-days: 1
 
       - name: Upload package to GitHub release
+        if: env.is_enabled == true
         uses: svenstaro/upload-release-action@v2
         with:
-          repo_token: ${{ env.GITHUB_TOKEN }}
-          file: tmp/${{ env.name }}.mrpack
-          asset_name: ${{ env.name }}.mrpack
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: build/${{ env.name }}.${{ matrix.extension }}
+          asset_name: ${{ env.name }}.${{ matrix.extension }}
           release_name: v${{ env.version }}
           tag: ${{ env.version }}
           overwrite: true

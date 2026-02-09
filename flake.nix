@@ -1,21 +1,29 @@
 {
   description = "Packwiz minecraft mopack enviroment";
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-  inputs.systems.url = "github:nix-systems/default";
-  inputs.flake-utils = {
-    url = "github:numtide/flake-utils";
-    inputs.systems.follows = "systems";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    systems.url = "github:nix-systems/default";
   };
 
   outputs =
-    { nixpkgs, flake-utils, ... }:
-    flake-utils.lib.eachDefaultSystem (
-      system:
-      let
-        pkgs = nixpkgs.legacyPackages.${system};
-      in
-      {
-        devShells.default = pkgs.mkShell { packages = with pkgs; [ packwiz ]; };
-      }
-    );
+    { nixpkgs, systems, ... }:
+    let
+      forEachSystem =
+        fn:
+        nixpkgs.lib.genAttrs (import systems) (
+          system:
+          fn (
+            import nixpkgs {
+              inherit system;
+            }
+          )
+        );
+    in
+    {
+      devShells = forEachSystem (pkgs: {
+        default = pkgs.mkShell {
+          packages = [ pkgs.packwiz ];
+        };
+      });
+    };
 }
