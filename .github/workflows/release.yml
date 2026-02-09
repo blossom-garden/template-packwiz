@@ -23,9 +23,9 @@ concurrency:
 jobs:
   get-info:
     runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, 'skip!')"
     steps:
       - name: Checkout code
-        if: "!contains(github.event.head_commit.message, 'skip!')"
         uses: actions/checkout@v4
 
       - name: Determine version number, pack name and last version number
