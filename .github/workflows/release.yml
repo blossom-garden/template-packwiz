@@ -2,15 +2,6 @@ name: Export Modpack
 
 on:
   workflow_dispatch:
-    inputs:
-      modrinth:
-        type: boolean
-        default: true
-        description: Export Modrinth format?
-      curseforge:
-        type: boolean
-        default: false
-        description: Export Curseforge format?
   push:
     branches: [main]
   pull_request:
@@ -31,71 +22,120 @@ jobs:
       - name: Determine version number, pack name and last version number
         id: cat
         run: |
-          echo $(cat ./pack.toml | grep "version = ") | sed -r 's/version = //' | sed -r 's/[" ]//g' | echo "version=$(< /dev/stdin)" >> "${GITHUB_OUTPUT}"
-          echo $(cat ./pack.toml | grep "name = ") | sed -r 's/name = //' | sed -r 's/[" ]//g' | sed -r 's/([a-z0-9])([A-Z])/\1-\2/g' | tr '[:upper:]' '[:lower:]' | echo "name=$(< /dev/stdin)" >> "${GITHUB_OUTPUT}"
-          echo "LASTTAG=$(git describe --tags --abbrev=0)" >> "${GITHUB_OUTPUT}"
+          set -euo pipefail
 
+          version=$(grep '^version\s*=' pack.toml | head -n1 | cut -d '"' -f2)
+          name=$(grep '^name\s*=' pack.toml | head -n1 | cut -d '"' -f2)
+
+          # snake_case conversion
+          name_snake=$(echo "$name" \
+            | sed -E 's/([a-z0-9])([A-Z])/\1_\2/g' \
+            | sed -E 's/[^a-zA-Z0-9]+/_/g' \
+            | tr '[:upper:]' '[:lower:]' \
+            | sed -E 's/^_+|_+$//g')
+
+          LASTTAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "none")
+
+          {
+            echo "version=$version"
+            echo "name=$name"
+            echo "name_snake=$name_snake"
+            echo "LASTTAG=$LASTTAG"
+
+            echo "deps<<EOF"
+            cat dependencies.txt
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
     outputs:
       version: ${{ steps.cat.outputs.version }}
+      name_snake: ${{ steps.cat.outputs.name_snake }}
       name: ${{ steps.cat.outputs.name }}
       LASTTAG: ${{ steps.cat.outputs.LASTTAG }}
+      deps: ${{ steps.cat.outputs.deps }}
 
   build:
     needs:
       - get-info
     env:
       version: ${{ needs.get-info.outputs.version }}
+      name_snake: ${{ needs.get-info.outputs.name_snake }}
       name: ${{ needs.get-info.outputs.name }}
-      is_enabled: ${{(matrix.platform == 'modrinth' && inputs.modrinth) || (matrix.platform == 'curseforge' && inputs.curseforge)}}
+      deps: ${{ needs.get-info.outputs.deps }}
     strategy:
       matrix:
         include:
           - platform: modrinth
-            extension: .mrpack
+            extension: mrpack
             runner: ubuntu-latest
 
           - platform: curseforge
-            extension: .zip
+            extension: zip
             runner: ubuntu-latest
     runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: write
+    permissions: write-all
     defaults:
       run:
         shell: bash
     if: needs.get-info.outputs.LASTTAG != needs.get-info.outputs.version
     steps:
       - name: Checkout code
-        if: env.is_enabled == true
         uses: actions/checkout@v4
 
       - name: Prepare
-        if: env.is_enabled == true
-        run: rm -rfv build; mkdir -pv build
+        id: prepare
+        run: |
+          mkdir -p ./build
+          echo "body<<EOF" >> "${GITHUB_OUTPUT}"
+          cat ./CHANGELOG-LATEST.md >> "${GITHUB_OUTPUT}"
+          echo "EOF" >> "${GITHUB_OUTPUT}"
 
       - name: Setup packwiz CLI
-        if: env.is_enabled == true
         uses: vspr-sh/packwiz-setup-action@master
 
       - name: Export
-        if: env.is_enabled == true
-        run: packwiz ${{ matrix.platform }} export -o build/${{ env.name }}.${{ matrix.extension }}
+        id: export
+        run: |
+          packwiz ${{ matrix.platform }} export -o ./build/${{ env.name_snake }}.${{ matrix.extension }}
+          echo "export=./build/${{ env.name_snake }}.${{ matrix.extension }}" >> "${GITHUB_OUTPUT}"
 
       - name: Upload mr package to workflow artifacts
-        if: env.is_enabled == true
         uses: actions/upload-artifact@v6
         with:
-          path: build/${{ env.name }}.${{ matrix.extension }}
-          name: ${{ env.name }}-${{ matrix.platform }}
+          path: ${{ steps.export.outputs.export }}
+          name: ${{ env.name_snake }}-${{ matrix.platform }}
           retention-days: 1
 
-      - name: Upload package to GitHub release
-        if: env.is_enabled == true
-        uses: svenstaro/upload-release-action@v2
+      - uses: Kir-Antipov/mc-publish@v3.3
+        if: matrix.platform == 'modrinth'
         with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: build/${{ env.name }}.${{ matrix.extension }}
-          asset_name: ${{ env.name }}.${{ matrix.extension }}
-          release_name: v${{ env.version }}
-          tag: ${{ env.version }}
-          overwrite: true
+          modrinth-id: p1qfuGUm
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-tag: ${{ env.version }}
+
+          files: ${{ steps.export.outputs.export }}
+          name: ${{ env.name }} v${{ env.version }}
+          version: ${{ env.version }}
+          version-type: release
+          changelog-file: CHANGELOG-LATEST.*
+
+          loaders: neoforge
+          game-versions: 1.21.1
+          dependencies: ${{ env.deps }}
+
+      - uses: Kir-Antipov/mc-publish@v3.3
+        if: matrix.platform == 'curseforge'
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-tag: ${{ env.version }}
+
+          files: ${{ steps.export.outputs.export }}
+          name: ${{ env.name }} v${{ env.version }}
+          version: ${{ env.version }}
+          version-type: release
+          changelog-file: CHANGELOG-LATEST.*
+
+          loaders: neoforge
+          game-versions: 1.21.1
+          dependencies: ${{ env.deps }}

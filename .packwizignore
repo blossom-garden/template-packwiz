@@ -9,3 +9,7 @@
 /files
 /LICENSE
 *.lock
+.markdownlint-cli2.yaml
+*.nu
+*.sh
+dependencies.*
