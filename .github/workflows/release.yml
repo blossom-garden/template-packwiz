@@ -2,6 +2,12 @@ name: Export Modpack
 
 on:
   workflow_dispatch:
+    inputs:
+      draft:
+        type: boolean
+        default: false
+        required: false
+        description: Should be a Draft release?
   push:
     branches: [main]
   pull_request:
@@ -33,14 +39,6 @@ jobs:
         run: |
           let pack = (open ./pack.toml)
           let changelog = (open ./CHANGELOG-LATEST.md | lines | skip 5 | str join "\n")
-          let dependencies = (ls **/*.pw.toml
-            | where name =~ '(resourcepacks|shaders|mods)'
-            | each {|file| open $file.name }
-            | each {|mod| {
-                project_id: $mod.update.modrinth.mod-id,
-                version_id: $mod.update.modrinth.version,
-                dependency_type: "embedded" }}
-            | to json)
           if (not ("out" | path exists)) { mkdir out }
           $"version=($pack.version)
           loaders=($pack.versions | columns | where ($it != "minecraft") | to json -r)
@@ -48,9 +46,6 @@ jobs:
           name=($pack.name)
           name-kebab=($pack.name | str kebab-case)
           outfile=out/($pack.name | str kebab-case).mrpack
-          dependencies<<DEP
-          ($dependencies)
-          DEP
           changelog<<CHG
           ($changelog)
           CHG
@@ -88,5 +83,4 @@ jobs:
           files: ${{ steps.info.outputs.outfile }}
           name: ${{ steps.info.outputs.name }}-${{ steps.info.outputs.game-versions }}-${{ steps.info.outputs.version }}
           changelog: ${{ steps.info.outputs.changelog }}
-          status: ${{ contains(github.ref_name, 'test') && 'draft' || 'listed' }}
-          dependencies: ${{ steps.info.outputs.dependencies }}
+          status: ${{ ( contains(github.ref_name, 'test') || inputs.draft ) && 'draft' || 'listed' }}
