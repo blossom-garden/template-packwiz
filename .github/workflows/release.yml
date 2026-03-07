@@ -15,6 +15,9 @@ defaults:
   run:
     shell: nu {0}
 
+env:
+  modrinth-project-id: AAAAAAAA
+
 jobs:
   export:
     runs-on: ubuntu-latest
@@ -67,13 +70,13 @@ jobs:
           name: ${{ steps.info.outputs.name }}-${{ steps.info.outputs.game-versions }}-${{ steps.info.outputs.version }}
 
       - uses: cloudnode-pro/modrinth-publish@v2
+        if: env.modrinth-project-id != 'AAAAAAAA'
         with:
           token: ${{ secrets.MODRINTH_TOKEN }}
-          project: p1qfuGUm
+          project: ${{ env.modrinth-project-id }}
           version: ${{ steps.info.outputs.version }}
           loaders: ${{ steps.info.outputs.loaders }}
           game-versions: ${{ steps.info.outputs.game-versions }}
           files: ${{ steps.info.outputs.outfile }}
           name: ${{ steps.info.outputs.name }}-${{ steps.info.outputs.game-versions }}-${{ steps.info.outputs.version }}
           changelog: ${{ steps.info.outputs.changelog }}
-          status: ${{ ( contains(github.ref_name, 'test') || inputs.draft ) && 'draft' || 'listed' }}
