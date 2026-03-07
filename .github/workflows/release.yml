@@ -2,12 +2,6 @@ name: Export Modpack
 
 on:
   workflow_dispatch:
-    inputs:
-      draft:
-        type: boolean
-        default: false
-        required: false
-        description: Should be a Draft release?
   push:
     branches: [main]
   pull_request:
@@ -48,8 +42,7 @@ jobs:
           outfile=out/($pack.name | str kebab-case).mrpack
           changelog<<CHG
           ($changelog)
-          CHG
-          " | save -a $env.GITHUB_OUTPUT
+          CHG" | save -a $env.GITHUB_OUTPUT
 
       - uses: vspr-sh/packwiz-setup-action@master
       - name: Packwiz export
@@ -63,15 +56,15 @@ jobs:
           retention-days: 1
 
       - name: Upload package to GitHub release
-        uses: svenstaro/upload-release-action@v2
+        uses: ncipollo/release-action@v1.20.0
         with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: ${{ steps.info.outputs.outfile }}
-          asset_name: ${{ steps.info.outputs.name-kebab }}.mrpack
-          release_name: ${{ steps.info.outputs.name }}-${{ steps.info.outputs.game-versions }}-${{ steps.info.outputs.version }}
+          allowUpdates: true
+          artifactErrorsFailBuild: true
+          artifacts: ${{ steps.info.outputs.outfile }}
+          artifactContentType: zip
+          bodyFile: ./CHANGELOG-LATEST.md
           tag: ${{ steps.info.outputs.version }}
-          body: ${{ steps.info.outputs.changelog }}
-          overwrite: true
+          name: ${{ steps.info.outputs.name }}-${{ steps.info.outputs.game-versions }}-${{ steps.info.outputs.version }}
 
       - uses: cloudnode-pro/modrinth-publish@v2
         with:
