@@ -35,15 +35,15 @@ def main [
 
 def "add mr" [id: string, --dry-run(-d)]: nothing -> nothing {
   if $dry_run {
-    print $"add curseforge project ($id)"
+    print $"add modrinth project ($id)"
   } else {
-    do -i { ^packwiz mr add -y $id }
+    do -i { ^packwiz mr add -y --project-id $id }
   }
 }
 def "add cf" [id: string, --dry-run(-d)]: nothing -> nothing {
   if $dry_run {
     print $"add curseforge project ($id)"
   } else {
-    do -i { ^packwiz cf add -y --addon-id $id $"https://curseforge.com/projects/($id)" }
+    do -i { ^packwiz cf add -y --addon-id $id }
   }
 }
