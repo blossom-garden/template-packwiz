@@ -22,15 +22,28 @@ def main [
     | from csv
 
   for record in $list {
-    print ($"> Provider: ($record.provider) " | fill -a right -c "=" -w 4)
-    print ($"> Project ID: ($record.id) " | fill -a right -c "=" -w 4)
+    print $record
     match $record.provider {
-      "modrinth" => (if $dry_run { print "add modrinth project" } else { ^packwiz mr add -y $record.id })
-      "curseforge" => (if $dry_run { print "add curseforge project" } else { ^packwiz cf add -y $record.id })
+      "modrinth" => (add mr --dry-run=$dry_run $record.id)
+      "curseforge" => (add cf --dry-run=$dry_run $record.id)
       _ => (null)
     }
-    print ""
   }
 
-  print ($"> Modlist ($modlist) imported! " | fill -a right -c "=" -w 4)
+  print $"\e[38;2;38;35;58m\e[48;2;38;35;58;38;2;196;167;231m Modlist ($modlist) imported! \e[0m\e[38;2;38;35;58m\e[0m"
+}
+
+def "add mr" [id: string, --dry-run(-d)]: nothing -> nothing {
+  if $dry_run {
+    print $"add curseforge project ($id)"
+  } else {
+    do -i { ^packwiz mr add -y $id }
+  }
+}
+def "add cf" [id: string, --dry-run(-d)]: nothing -> nothing {
+  if $dry_run {
+    print $"add curseforge project ($id)"
+  } else {
+    do -i { ^packwiz cf add -y --addon-id $id $"https://curseforge.com/projects/($id)" }
+  }
 }
