@@ -2,10 +2,15 @@ name: Export Modpack
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    inputs:
+      github-release:
+        type: boolean
+        default: true
+        description: Publish Github Release
+      modrinth-release:
+        type: boolean
+        default: false
+        description: Publish Modrinth Release
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -16,12 +21,11 @@ defaults:
     shell: nu {0}
 
 env:
-  modrinth-project-id: AAAAAAAA
+  modrinth-project-id: ''
 
 jobs:
   export:
     runs-on: ubuntu-latest
-    if: "!contains(github.event.head_commit.message, 'skip!')"
     permissions:
       contents: write
     steps:
@@ -70,7 +74,7 @@ jobs:
           name: ${{ steps.info.outputs.name }}-${{ steps.info.outputs.game-versions }}-${{ steps.info.outputs.version }}
 
       - uses: cloudnode-pro/modrinth-publish@v2
-        if: env.modrinth-project-id != 'AAAAAAAA'
+        if: env.modrinth-project-id != ''
         with:
           token: ${{ secrets.MODRINTH_TOKEN }}
           project: ${{ env.modrinth-project-id }}
