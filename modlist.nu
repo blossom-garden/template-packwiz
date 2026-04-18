@@ -84,7 +84,7 @@ def generate-link []: record<name: string, id: any, provider: string> -> string 
       "curseforge" => $"https://curseforge.com/projects/($in.id)",
       _ => ""
     }
-    let name = ($in.name | str trim | str replace "[" "\\[" | str replace "]" "\\]")
+    let name: string = ($in.name | str trim | str replace -ra '(?<bracket>[\[\]])' '\$bracket')
     $"- [($name)]\(($url)\)"
 }
 
@@ -119,7 +119,8 @@ export def "changelog" []: nothing -> string {
   let added_links: string = $added | each {|i| $i | generate-link } | str join "\n"
   let removed_links: string = $removed | each {|i| $i | generate-link } | str join "\n"
 
-  let markdown: string = $"**Adicionado**\n\n($added_links)"
-  if ($removed_links | is-not-empty) { return $"($markdown)\n\n**Removido**\n\n($removed_links)" }
+  mut markdown: string = ""
+  if ($added_links | is-not-empty) { $markdown = ([$markdown $"**Adicionado**\n\n($added_links)\n\n"] | str join "") }
+  if ($removed_links | is-not-empty) { $markdown = ([$markdown $"**Removido**\n\n($removed_links)\n\n"] | str join "") }
   $markdown
 }
