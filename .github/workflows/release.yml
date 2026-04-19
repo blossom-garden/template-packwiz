@@ -3,10 +3,6 @@ name: Export Modpack
 on:
   workflow_dispatch:
     inputs:
-      github-release:
-        type: boolean
-        default: true
-        description: Publish Github Release
       modrinth-release:
         type: boolean
         default: false
@@ -21,7 +17,7 @@ defaults:
     shell: nu {0}
 
 env:
-  modrinth-project-id: ''
+  modrinth-project-id: ""
 
 jobs:
   export:
@@ -32,7 +28,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: hustcer/setup-nu@v3
         with:
-          version: "*"
+          version: "0.111.0"
           enable-plugins: true
 
       - name: Get Info
@@ -73,8 +69,8 @@ jobs:
           tag: ${{ steps.info.outputs.version }}
           name: ${{ steps.info.outputs.name }}-${{ steps.info.outputs.game-versions }}-${{ steps.info.outputs.version }}
 
-      - uses: cloudnode-pro/modrinth-publish@v2
-        if: env.modrinth-project-id != ''
+      - if: env.modrinth-project-id != ''
+        uses: cloudnode-pro/modrinth-publish@v2
         with:
           token: ${{ secrets.MODRINTH_TOKEN }}
           project: ${{ env.modrinth-project-id }}
