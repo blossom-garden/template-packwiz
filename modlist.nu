@@ -50,7 +50,7 @@ def "add cf" [id: int, dry: bool = false]: nothing -> nothing {
 
 # Export all the mods into a modlist in markdown format
 export def "export" []: nothing -> string {
-  let list: list<record<name: string, id: any, provider: string>> = ls **/*.pw.toml
+  let list: table<name: string, id: any, provider: string> = ls **/*.pw.toml
   | each {|it| open $it.name}
   | where update? != null
   | each {|it| $it | get-metadata}
@@ -88,39 +88,48 @@ def generate-link []: record<name: string, id: any, provider: string> -> string 
     $"- [($name)]\(($url)\)"
 }
 
-def "get added" [diff: list<record<status: string, file: string>>]: nothing -> list<record<name: string, id: any, provider: string>> {
+def "get added" [diff: table<status: string, file: string>]: nothing -> table<name: string, id: any, provider: string> {
   $diff
   | where status == "A" | get file | each {|it| open $it}
   | where update? != null
   | each {|it| $it | get-metadata }
 }
 
-def "get removed" [diff: list<record<status: string, file: string>>]: nothing -> list<record<name: string, id: any, provider: string>> {
+def "get removed" [diff: table<status: string, file: string>]: nothing -> table<name: string, id: any, provider: string> {
   $diff
-  | where status == "D" | get file | each {|it|
-    mut commit: string = git log --diff-filter=D --pretty="%h" -- $it
-    if ($commit | is-empty) { $commit = "HEAD" }
-    (git show ($commit):($it) | from toml)
-  }
+  | where status == "D" | get file | each {|it| (git show HEAD~1:($it) | from toml) }
   | where update? != null
   | each {|it| $it | get-metadata }
 }
 
 # Returns the most recently added files
 export def "changelog" []: nothing -> string {
-  let diff: list<record<status: string, file: string>> = git diff --name-status --cached
+  let diff: table<status: string, file: string> = git diff --name-status HEAD~2...
   | str replace -r -a "\t" "»¦«"
   | lines | where $it =~ ".pw.toml"
   | split column "»¦«" status file
+  | append (git diff --name-status --cached
+    | str replace -r -a "\t" "»¦«"
+    | lines | where $it =~ ".pw.toml"
+    | split column "»¦«" status file)
 
-  let added: list<record<name: string, id: any, provider: string>> = get added $diff
-  let removed: list<record<name: string, id: any, provider: string>> = get removed $diff
+  let added = get added $diff
+  let removed = get removed $diff
 
-  let added_links: string = $added | each {|i| $i | generate-link } | str join "\n"
-  let removed_links: string = $removed | each {|i| $i | generate-link } | str join "\n"
+  let added_links = $added | each {|i| $i | generate-link } | str join "\n"
+  let removed_links = $removed | each {|i| $i | generate-link } | str join "\n"
 
-  mut markdown: string = ""
-  if ($added_links | is-not-empty) { $markdown = ([$markdown $"**Adicionado**\n\n($added_links)\n\n"] | str join "") }
-  if ($removed_links | is-not-empty) { $markdown = ([$markdown $"**Removido**\n\n($removed_links)\n\n"] | str join "") }
+  mut markdown = $"\n**((open pack.toml).version)**"
+  if ($added_links | is-not-empty) { $markdown = ([$markdown $"**Adicionado**\n\n($added_links)"] | str join "\n\n") }
+  if ($removed_links | is-not-empty) { $markdown = ([$markdown $"**Removido**\n\n($removed_links)"] | str join "\n\n") }
   $markdown
+}
+
+def semver-level [] {[ "major" "minor" "patch" "alpha" "beta" "rc" "release"]}
+
+# Semver Bump the pack
+export def bump [level: string@semver-level] {
+  mut pack: table = (open pack.toml)
+  $pack.version = $"($pack.version | semver bump patch)"
+  ($pack | save -fp pack.toml)
 }
