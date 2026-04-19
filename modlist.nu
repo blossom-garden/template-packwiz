@@ -55,13 +55,14 @@ export def "export" []: nothing -> string {
   | where update? != null
   | each {|it| $it | get-metadata}
 
-  let markdown: string = $"\n**((open pack.toml).version)**" + ($list | each {|it|
+  let markdown: string = [$"\n**((open pack.toml).version)**" ($list | each {|it|
     let url: string = match $it.provider {
       "modrinth" => $"https://modrinth.com/project/($it.id)",
-      "curseforge" => $"https://curseforge.com/projects/($it.id)"
+      "curseforge" => $"https://curseforge.com/projects/($it.id)",
+      _ => "#nope",
     }
     $"- [($it.name)]\(($url)\)"
-  } | str join "\n")
+  } | str join "\n")] | str join "\n\n"
 
   $markdown
 }
