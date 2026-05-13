@@ -100,7 +100,7 @@ def "get removed" [diff: table<status: string, file: string>]: nothing -> table<
 
 # Returns the most recently added files
 export def "changelog" []: nothing -> string {
-  let diff: table<status: string, file: string> = git diff --name-status HEAD~2...
+  let diff: table<status: string, file: string> = git diff --name-status HEAD~1...
   | str replace -r -a "\t" "»¦«"
   | lines | where $it =~ ".pw.toml"
   | split column "»¦«" status file
